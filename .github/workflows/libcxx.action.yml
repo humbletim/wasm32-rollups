@@ -1,1 +1,9 @@
-uses: ../libcxx/libcxx.action.yml
+name: Build and Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    uses: ../libcxx/libcxx.action.yml
