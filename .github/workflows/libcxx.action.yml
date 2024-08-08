@@ -6,4 +6,4 @@ on:
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
-    uses: ../libcxx/libcxx.action.yml
+    uses: ../libcxx
