@@ -9,10 +9,24 @@ runs:
         wget https://apt.llvm.org/llvm.sh
         chmod +x ./llvm.sh
         sudo ./llvm.sh 17
+        #curl https://github.com/bytecodealliance/wasmtime/releases/download/dev/wasmtime-dev-x86_64-linux.tar.xz \
+        #    | tar --strip-components=1 -xvf wasmtime-dev-x86_64-linux/wasmtime
+
     - name: Build
       shell: bash
       working-directory: libcxx
       run: ./build.sh
+
+    - name: Test
+      shell: bash
+      working-directory: libcxx
+      run: |
+        ls -l staging/
+        ./build.sh compile c++ -o main.wasm test/main.cpp src/noops.*
+        node src/versions.js main.wasm
+        ./build.sh compile c -o stdio.wasm test/stdio.c src/noops.*.c
+        node src/versions.js stdio.wasm
+
     - name: Upload Release Artifact
       uses: actions/upload-artifact@v3
       with:
