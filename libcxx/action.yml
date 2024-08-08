@@ -32,7 +32,7 @@ runs:
       shell: bash
       working-directory: libcxx
       run: |
-        ls -l staging/
+        ls -l staging/ *.tar.gz
         ./build.sh compile c++ -o main.wasm test/main.cpp src/noops.*
         node src/versions.js main.wasm
         ./build.sh compile c -o stdio.wasm test/stdio.c src/noops.*.c
@@ -41,9 +41,8 @@ runs:
     - name: Upload Release Artifact
       uses: actions/upload-artifact@v3
       with:
-        working-directory: libcxx
         name: release-artifact
-        path: "*.rollups.tar.gz"
+        path: "libcxx/*.rollups.*-wasm32.tar.gz"
     - name: Setup tmate session
       uses: mxschmitt/action-tmate@v3
       #if: ${{ failure() }}
