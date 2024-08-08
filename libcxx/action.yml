@@ -8,9 +8,20 @@ runs:
       run: |
         wget https://apt.llvm.org/llvm.sh
         chmod +x ./llvm.sh
-        sudo ./llvm.sh 17
+        sudo ./llvm.sh 17 2>&1 | (grep -iE 'warning|error|fail|\bnot\b' || true)
+        mkdir -p bin
+        apt download binaryen && dpkg -x binaryen*.deb bin/
+        echo $PWD/bin | tee -a $GITHUB_PATH
         #curl https://github.com/bytecodealliance/wasmtime/releases/download/dev/wasmtime-dev-x86_64-linux.tar.xz \
         #    | tar --strip-components=1 -xvf wasmtime-dev-x86_64-linux/wasmtime
+
+    - name: Preflight checks
+      shell: bash
+      working-directory: libcxx
+      run: |
+        clang++-17 --version | head -1
+        llvm-config-17 --version
+        wasm-dis --version
 
     - name: Build
       shell: bash
