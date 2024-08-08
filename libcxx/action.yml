@@ -33,18 +33,21 @@ runs:
       working-directory: libcxx
       run: |
         ls -l staging/ *.tar.gz
+        echo artifact_name=$(date "+%Y%m%d").rollups.libcxx-wasm32 | tee -a $GITHUB_ENV | tee -a $GITHUB_STEP_SUMMARY
         ./build.sh compile c++ -o main.wasm test/main.cpp src/noops.*
-        node src/versions.js main.wasm
+        ( echo "### main.wasm" ; echo '```' ; node src/versions.js main.wasm ; echo '```' ) | tee -a $GITHUB_STEP_SUMMARY
         ./build.sh compile c -o stdio.wasm test/stdio.c src/noops.*.c
-        node src/versions.js stdio.wasm
+        ( echo "### stdio.wasm" ; echo '```' ; node src/versions.js stdio.wasm ; echo '```' ) | tee -a $GITHUB_STEP_SUMMARY
 
     - name: Upload Release Artifact
       uses: actions/upload-artifact@v3
       with:
-        name: release-artifact
-        path: "libcxx/*.rollups.*-wasm32.tar.gz"
-    - name: Setup tmate session
-      uses: mxschmitt/action-tmate@v3
-      #if: ${{ failure() }}
-      with:
-        limit-access-to-actor: true
+        name: ${{ env.artifact_name }}
+        path: libcxx/staging/
+        compression-level: 9
+
+    # - name: Setup tmate session
+    #   uses: mxschmitt/action-tmate@v3
+    #   #if: ${{ failure() }}
+    #   with:
+    #     limit-access-to-actor: true
