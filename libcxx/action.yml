@@ -46,6 +46,6 @@ runs:
         path: "*.rollups.tar.gz"
     - name: Setup tmate session
       uses: mxschmitt/action-tmate@v3
-      if: ${{ failure() }}
+      #if: ${{ failure() }}
       with:
         limit-access-to-actor: true
