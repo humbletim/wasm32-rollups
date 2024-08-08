@@ -1,1 +1,1 @@
-../../libcxx/libcxx.action.yml
+uses: ../libcxx/libcxx.action.yml
