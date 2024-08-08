@@ -1,0 +1,22 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Ensure llvm-17
+      - run: |
+      	  wget https://apt.llvm.org/llvm.sh
+	  chmod +x ./llvm.sh
+	  ./llvm.sh 17
+      - name: Build
+        run: ./build.sh
+      - name: Upload Release Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: release-artifact
+          path: *.rollups.tar.gz
