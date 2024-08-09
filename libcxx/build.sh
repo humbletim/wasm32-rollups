@@ -189,24 +189,25 @@ generate_protobins() {
     cat <<EOT > staging/bin/w32c++-$V && chmod a+x staging/bin/w32c++-$V
 #!/bin/bash
 BASE=\$(dirname \$(dirname \$BASH_SOURCE))/libcxx-static
-$CXX -xc++ ${wasm32_baremetal[@]} -isystem\$BASE -Wl,\$BASE/libcxx.a -Wl,\$BASE/libqwasi.a "\$@"
+\${CXX:-clang++} -xc++ ${wasm32_baremetal[@]} -isystem\$BASE -Wl,\$BASE/libcxx.a -Wl,\$BASE/libqwasi.a "\$@"
 EOT
 
     cat <<EOT > staging/bin/w32cc-$V && chmod a+x staging/bin/w32cc-$V
 #!/bin/bash
 BASE=\$(dirname \$(dirname \$BASH_SOURCE))/libc-static
-$CXX -xc ${wasm32_baremetal[@]} -isystem\$BASE -Wl,\$BASE/libc.a -Wl,\$BASE/libqwasi.a "\$@"
+\${CC:-clang} -xc ${wasm32_baremetal[@]} -isystem\$BASE -Wl,\$BASE/libc.a -Wl,\$BASE/libqwasi.a "\$@"
 EOT
 
     cat <<EOT > staging/bin/w32info && chmod a+x staging/bin/w32info
 #!/bin/bash
 file \$1
 echo \$(du -hsb \$1 | awk '{ print \$1; }') bytes
-node $PWD/src/versions.js \$1
+BASE=\$(dirname \$BASH_SOURCE)
+node \$BASE/detect-module-versions.js \$1
 wasm-dis \$1 | grep -E '[(](import|export|global) '
 #wasm2wat \$1
 EOT
-
+    cp -av src/versions.js staging/bin/detect-module-versions.js
 }
 
 # Check LLVM version
@@ -327,11 +328,14 @@ generate_defines c++ "${CXX_HEADERS[@]}" "${C_HEADERS[@]}" > scratch/libc++.defi
 make_header c++ "${CXX_RESOLVED_HEADERS[@]}" "${C_RESOLVED_HEADERS[@]}" > staging/libcxx-static/libcxx-wasm32.hpp
 generate_system_congruent "${CXX_RESOLVED_HEADERS[@]}"  > staging/libcxx-static/libcxx-dynamic.hpp
 cp -av src/libcxx.hpp staging/libcxx-static/
+cp -av test/main.cpp staging/libcxx-static/example.cpp
 
 generate_defines c "${C_HEADERS[@]}" > scratch/libc.defines
 make_header c "${C_RESOLVED_HEADERS[@]}" > staging/libc-static/libc-wasm32.h
 cp -av src/libc.h staging/libc-static/
 generate_system_congruent "${C_RESOLVED_HEADERS[@]}" > staging/libc-static/libc-dynamic.h
+cp -av test/main.c staging/libc-static/example.c
+cp -av test/stdio.c staging/libc-static/qwasi_stdio_test.c
 
 # === Generate other artifacts (licenses, etc.) ===
 
