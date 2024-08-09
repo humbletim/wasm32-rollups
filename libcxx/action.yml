@@ -34,6 +34,7 @@ runs:
       run: |
         ls -l staging/ *.tar.gz
         echo artifact_name=$(date "+%Y%m%d").rollups.libcxx-wasm32 | tee -a $GITHUB_ENV | tee -a $GITHUB_STEP_SUMMARY
+        export CC=clang-17 CXX=clang++-17
         ./staging/bin/w32c++-17 test/main.cpp -o main.wasm
         ./staging/bin/w32cc-17  test/stdio.c  -o stdio.wasm
         for x in *.wasm ; do
