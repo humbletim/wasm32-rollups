@@ -2,7 +2,7 @@
 
 # libcxx wasm32 hybrid amalgamation script that fetches prebuilt (wasm32)
 # libc++.a and related .deb's from upstream ubuntu repos and amalgamates
-# everything together into a singular libcxx-wasm32.a + libcxx-wasm32.hpp
+# everything together into a singular static libcxx.a + libcxx.hpp
 
 set -e  # Exit on error
 
@@ -41,8 +41,7 @@ for header in "${CXX_HEADERS[@]}"; do
 done
 CXX_RESOLVED_HEADERS+=("${C_RESOLVED_HEADERS}")
 
-# Build flags
-wasm32_cxxflags=(
+wasm32_baremetal=(
   "--target=wasm32"
   "-nostdinc"
   "-nostdlib"
@@ -50,32 +49,11 @@ wasm32_cxxflags=(
   "-fno-exceptions"
 ) 
 
-wasm32_practiceflags=(
-    "${wasm32_cxxflags[@]}"
-    "-isystem./staging"
-    "-Wl,-L./staging"
-    "-Wl,./staging/libcxx-wasm32.a"
-    "-Wl,--global-base=65535"
-)
-test -v DEBUG && test -n $DEBUG \
-    && wasm32_practiceflags+=( "-g" "-O0" ) \
-    || wasm32_practiceflags+=( "-Oz" "-Wl,--strip-debug" )
-
-if [[ "$1" == "compile" ]] ; then
-    shift
-    mode=$1
-    shift
-    $CXX -x$mode ${wasm32_practiceflags[@]} "$@"
-    wasm=$(echo "$@" | grep -Eo "\b[^ ]+[.]wasm")
-    test -f $wasm && wasm-dis $wasm | grep -E '[(](import|export|global) '
-    exit 0
-fi
-
 cpp_isystem_dirs=( "$C_HEADERS_DIR" "$LLVM_HEADERS_DIR" )
 cpp_flags=(
   "-xc"
   "${cpp_isystem_dirs[@]/#/"-isystem"}"
-  "${wasm32_cxxflags[@]}"
+  "${wasm32_baremetal[@]}"
   "-D__wasi__=1"
   "-Wno-pragma-system-header-outside-header"
   "-Wno-unused-command-line-argument"
@@ -85,7 +63,7 @@ cxxpp_isystem_dirs=( "$CXX_HEADERS_DIR" "${cpp_isystem_dirs[@]}" )
 cxxpp_flags=(
   "-xc++"
   "${cxxpp_isystem_dirs[@]/#/"-isystem"}"
-  "${wasm32_cxxflags[@]}"
+  "${wasm32_baremetal[@]}"
   "-D__wasi__=1"
   "-Wno-pragma-system-header-outside-header"
   "-Wno-unused-command-line-argument"
@@ -205,6 +183,31 @@ repack_library() {
     #$RANLIB $lib
 }
 
+generate_protobins() {
+    mkdir -p staging/bin
+
+    cat <<EOT > staging/bin/w32c++-$V && chmod a+x staging/bin/w32c++-$V
+#!/bin/bash
+BASE=\$(dirname \$(dirname \$BASH_SOURCE))/libcxx-static
+$CXX -xc++ ${wasm32_baremetal[@]} -isystem\$BASE -Wl,\$BASE/libcxx.a -Wl,\$BASE/libqwasi.a "\$@"
+EOT
+
+    cat <<EOT > staging/bin/w32cc-$V && chmod a+x staging/bin/w32cc-$V
+#!/bin/bash
+BASE=\$(dirname \$(dirname \$BASH_SOURCE))/libc-static
+$CXX -xc ${wasm32_baremetal[@]} -isystem\$BASE -Wl,\$BASE/libc.a -Wl,\$BASE/libqwasi.a "\$@"
+EOT
+
+    cat <<EOT > staging/bin/w32info && chmod a+x staging/bin/w32info
+#!/bin/bash
+file \$1
+echo \$(du -hsb \$1 | awk '{ print \$1; }') bytes
+node $PWD/src/versions.js \$1
+wasm-dis \$1 | grep -E '[(](import|export|global) '
+#wasm2wat \$1
+EOT
+
+}
 
 # Check LLVM version
 $CXX --version | grep -E "\\b${V}[.][0-9]+[.][0-9]+\\b" >/dev/null \
@@ -264,23 +267,30 @@ test -f scratch/unpacked.txt || (
 )
 
 
+mkdir -p scratch/qwasi
+for x in ../explorations/qwasi/noops.*.c ; do
+    $CXX ${wasm32_baremetal[@]} -Wno-unused-command-line-argument -c -xc++ $x -o scratch/qwasi/$(basename $x).o
+done
+
 # false && for x in cxa.host ; do
 #     echo "polyfilling $x..."
-#     $CXX  ${wasm32_cxxflags[@]} -Wno-unused-command-line-argument -c -xc++ src/$x.c -o scratch/objects/$x.o
+#     $CXX  ${wasm32_baremetal[@]} -Wno-unused-command-line-argument -c -xc++ src/$x.c -o scratch/objects/$x.o
 #     du -hsb scratch/objects/$x.o
 # done
 
 # Create output directory
 test -d staging && rm staging -rf
-mkdir -p staging
+mkdir -p staging/libcxx-static staging/libc-static
 
 # libcxx
-repack_library staging/libcxx-wasm32.a scratch/objects/*
-test -d scratch/wasilibc_objects && repack_library staging/libcxx-wasi-wasm32.a scratch/wasilibc_objects/*
+repack_library staging/libcxx-static/libcxx.a scratch/objects/*
+test ! -d scratch/wasilibc_objects || repack_library staging/libcxx-static/libwasi.a scratch/wasilibc_objects/*
+test ! -d scratch/qwasi || repack_library staging/libcxx-static/libqwasi.a scratch/qwasi/*
 
 # libc
-repack_library staging/libc-wasm32.a scratch/libc-objects/*
-test -d scratch/libc-wasilibc_objects && repack_library staging/libc-wasi-wasm32.a scratch/libc-wasilibc_objects/*
+repack_library staging/libc-static/libc.a scratch/libc-objects/*
+test -d scratch/libc-wasilibc_objects && repack_library staging/libc-static/libwasi.a scratch/libc-wasilibc_objects/*
+test ! -d scratch/qwasi || repack_library staging/libc-static/libqwasi.a scratch/qwasi/*
 
 function make_header() {(set -Euo pipefail ;
     local mode=$1
@@ -306,34 +316,33 @@ function make_header() {(set -Euo pipefail ;
 	| perl -pe 's@^(#[^"]+")/usr/lib/[^ ]+/include/@$1\{llvm}/@g'	       
 )}
 
+generate_system_congruent() {
+    echo "// generated"
+    for x in "$@" ; do
+	echo "#include <$(basename $x)>"
+    done
+}
+
 generate_defines c++ "${CXX_HEADERS[@]}" "${C_HEADERS[@]}" > scratch/libc++.defines
-make_header c++ "${CXX_RESOLVED_HEADERS[@]}" "${C_RESOLVED_HEADERS[@]}" > staging/libcxx-wasm32.hpp
+make_header c++ "${CXX_RESOLVED_HEADERS[@]}" "${C_RESOLVED_HEADERS[@]}" > staging/libcxx-static/libcxx-wasm32.hpp
+generate_system_congruent "${CXX_RESOLVED_HEADERS[@]}"  > staging/libcxx-static/libcxx-dynamic.hpp
+cp -av src/libcxx.hpp staging/libcxx-static/
 
 generate_defines c "${C_HEADERS[@]}" > scratch/libc.defines
-make_header c "${C_RESOLVED_HEADERS[@]}" > staging/libc-wasm32.h
+make_header c "${C_RESOLVED_HEADERS[@]}" > staging/libc-static/libc-wasm32.h
+cp -av src/libc.h staging/libc-static/
+generate_system_congruent "${C_RESOLVED_HEADERS[@]}" > staging/libc-static/libc-dynamic.h
 
 # === Generate other artifacts (licenses, etc.) ===
 
 # pull together copyright files from the unpacked .deb's into compresed doc
-amalgamate_sources $(find scratch/usr/share/doc/ -name copyright) > scratch/licenses.txt
-cat scratch/licenses.txt | gzip -9 -c > staging/licenses.txt.gz
-
-(
-    echo "// generated"
-    for x in "${CXX_RESOLVED_HEADERS[@]}" ; do
-	echo "#include <$(basename $x)>"
-    done
-) > staging/libcxx-dynamic.hpp
-cp -av src/libcxx.hpp staging/
-
-(
-    echo "// generated"
-    for x in "${C_RESOLVED_HEADERS[@]}" ; do
-	echo "#include <$(basename $x)>"
-    done
-) > staging/libc-dynamic.h
-cp -av src/libc.h staging/
-
+amalgamate_sources $(find scratch/usr/share/doc/ -name copyright) > scratch/cxx-licenses.txt
+amalgamate_sources $(find scratch/usr/share/doc/ -name copyright | grep -vE 'libc[+][+]') > scratch/c-licenses.txt
+#cat scratch/licenses.txt | gzip -9 -c > staging/licenses.txt.gz
+#mkdir -p staging/doc
+cat scratch/cxx-licenses.txt > staging/libcxx-static/upstream-licenses.txt
+cat scratch/c-licenses.txt > staging/libc-static/upstream-licenses.txt
+ 
 # === Generate YAML-compatible readme ===
 # Function to generate a YAML list from a Bash array
 yaml_list() {
@@ -345,7 +354,7 @@ yaml_list() {
   done
 }
 readmestuff=$(cat <<EOF
-title: amalgamated libcxx-wasm32.a and libcxx-wasm32.hpp
+title: amalgamated libcxx.a and libcxx.hpp
 date: $(date +%s)
 GITHUB:
   REPOSITORY: ${GITHUB_REPOSITORY:-GITHUB_REPOSITORY}
@@ -359,8 +368,8 @@ $(yaml_list "    " "${CXX_HEADERS[@]}")
   c:
 $(yaml_list "    " "${C_HEADERS[@]}")
 cxxflags:
-  wasm32: [ $(IFS=" "; echo "${wasm32_cxxflags[*]}") ]
-  practice: [ $(IFS=" "; echo "${wasm32_practiceflags[*]}") ] 
+  wasm32: [ $(IFS=" "; echo "${wasm32_baremetal[*]}") ]
+  link: -lcxx-static -lqwasi
 misc:
   cxxpp_flags: [ $(IFS=" "; echo "${cxxpp_flags[@]}") ]
   debs:
@@ -372,9 +381,11 @@ $(for d in downloads/*.deb; do
   done)
 EOF
 )
-echo "$readmestuff" > staging/libcxx-wasm32.readme.txt
+echo "$readmestuff" > staging/readme.txt
 
-ls -l staging/
+generate_protobins
+
+find staging/ -ls
 
 # === Create release tarball ===
 bundle=$(date "+%Y%m%d").rollups.libcxx-wasm32.tar.gz

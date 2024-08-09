@@ -1,6 +1,3 @@
-// attempt to neutralize import dependencies by turning "wasilibc"
-// operations into benign "no-ops" -- humbletim 2024.08.07
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -22,7 +19,7 @@ POLYFILL struct _IO_FILE* fopen(const char* path, const char* mode) { return 0; 
 #pragma clang diagnostic pop
 
 POLYFILL void __wasilibc_populate_preopens() { }
-POLYFILL int  __wasilibc_find_relpath(const char *path, const char **abs_prefix, char **relative_path, unsigned long relative_path_len) {  return -1; }
+POLYFILL int  __wasilibc_find_relpath(const char *path, const char **abs_prefix, char **relative_path, unsigned long relative_path_len) { return -1; }
 
 #ifdef __cplusplus
 } // extern "C"

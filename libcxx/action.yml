@@ -34,10 +34,12 @@ runs:
       run: |
         ls -l staging/ *.tar.gz
         echo artifact_name=$(date "+%Y%m%d").rollups.libcxx-wasm32 | tee -a $GITHUB_ENV | tee -a $GITHUB_STEP_SUMMARY
-        ./build.sh compile c++ -o main.wasm test/main.cpp src/noops.*
-        ( echo "### main.wasm" ; echo '```' ; node src/versions.js main.wasm ; echo '```' ) | tee -a $GITHUB_STEP_SUMMARY
-        ./build.sh compile c -o stdio.wasm test/stdio.c src/noops.*.c
-        ( echo "### stdio.wasm" ; echo '```' ; node src/versions.js stdio.wasm ; echo '```' ) | tee -a $GITHUB_STEP_SUMMARY
+        ./staging/bin/w32c++-17 test/main.cpp -o main.wasm
+        ./staging/bin/w32cc-17  test/stdio.c  -o stdio.wasm
+        for x in *.wasm ; do
+          echo "### $x" ; echo '```' ; ./staging/bin/w32info $x ; echo '```' ;
+        done | tee -a $GITHUB_STEP_SUMMARY
+
 
     - name: Upload Release Artifact
       uses: actions/upload-artifact@v3

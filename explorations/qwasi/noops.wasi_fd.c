@@ -1,6 +1,3 @@
-// attempt to neutralize import dependencies by turning wasi filesystem
-// operations into benign "no-ops" -- humbletim 2024.08.07
-
 #ifdef __cplusplus
 extern "C" {
 #endif
