@@ -42,7 +42,7 @@ runs:
         ./staging/bin/w32cc-17 test/stdio.c -o stdio.c.wasm
         ./staging/bin/w32c++-17 test/stdio.cpp -o stdio.cxx.capture.wasm -lqwasi-capture
         ./staging/bin/w32cc-17 test/stdio.c -o stdio.c.capture.wasm -lqwasi-capture
-        ./staging/bin/w32c++-17 test/stdio.cpp -o stdio.cxx.baremetal.capture.wasm -lqwasi-capture -Oz -s
+        ./staging/bin/w32c++-17 test/stdio.cpp -o stdio.cxx.baremetal.capture.wasm -lqwasi-capture -Oz -Wl,--strip-debug
         for x in *.wasm ; do
           echo "### $x" ; echo '```' ; ./staging/bin/w32info $x ; echo '```' ;
         done | tee -a $GITHUB_STEP_SUMMARY
