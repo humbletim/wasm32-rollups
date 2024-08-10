@@ -15,6 +15,21 @@ function module_detect_versions(exports) {
     }, {});
 }
 
+function maybe_dump_captured_fd_writes(exports) {
+    const STRUCT_ACCESSOR  = '.struct.captured_fd_writes{i32;u8[]}';
+    var ptr = exports['.struct.captured_fd_writes{i32;u8[]}']?.call();
+    if (!ptr) return false;
+    var len = new DataView(exports.memory.buffer).getInt32(ptr, true);
+    var buffer = Buffer.from(exports.memory.buffer, ptr + 4, len);
+    console.log({ ptr, len });
+    console.log("--------------------------------------------------------------------------------");
+    console.log(buffer.toString('utf-8'));
+    console.log("--------------------------------------------------------------------------------");
+}
+
 (async () => {
-    console.table(module_detect_versions((await WebAssembly.instantiate(require('fs').readFileSync(process.argv[2]))).instance.exports));
+    var exports = (await WebAssembly.instantiate(require('fs').readFileSync(process.argv[2]))).instance.exports;
+    console.table(module_detect_versions(exports));
+    if (exports.xmain) exports.xmain();
+    maybe_dump_captured_fd_writes(exports);
 })()
