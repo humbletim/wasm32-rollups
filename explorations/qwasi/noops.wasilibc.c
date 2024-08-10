@@ -18,6 +18,13 @@ POLYFILL int fclose(int a) { return EBADF; }
 POLYFILL struct _IO_FILE* fopen(const char* path, const char* mode) { return 0; }
 #pragma clang diagnostic pop
 
+POLYFILL char* getenv(const char*) { return 0; }
+POLYFILL void __wasilibc_initialize_environ(void) {}
+POLYFILL void __wasilibc_ensure_environ(void) {}
+POLYFILL void __wasilibc_deinitialize_environ(void) {}
+POLYFILL void __wasilibc_maybe_reinitialize_environ_eagerly(void) {}
+POLYFILL char **__wasilibc_get_environ(void) { return 0; }
+
 POLYFILL void __wasilibc_populate_preopens() { }
 POLYFILL int  __wasilibc_find_relpath(const char *path, const char **abs_prefix, char **relative_path, unsigned long relative_path_len) { return -1; }
 
