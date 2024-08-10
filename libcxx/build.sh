@@ -374,7 +374,7 @@ make_header c++ "${CXX_RESOLVED_HEADERS[@]}" "${C_RESOLVED_HEADERS[@]}" > stagin
 generate_system_congruent "${CXX_RESOLVED_HEADERS[@]}"  > staging/libcxx-static/libcxx-dynamic.hpp
 cp -av src/libcxx.hpp staging/libcxx-static/
 cp -av test/main.cpp staging/libcxx-static/example.cpp
-cp -av test/stdio.cpp staging/libc-static/qwasi_stdio_test.cpp
+cp -av test/stdio.cpp staging/libcxx-static/qwasi_stdio_test.cpp
 
 generate_defines c "${C_HEADERS[@]}" > scratch/libc.defines
 make_header c "${C_RESOLVED_HEADERS[@]}" > staging/libc-static/libc-wasm32.h
