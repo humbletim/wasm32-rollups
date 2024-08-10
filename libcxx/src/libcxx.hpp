@@ -5,9 +5,13 @@
 #pragma once
 #ifdef __wasm32__
   #include <libcxx-wasm32.hpp>
-  #define EXPORT_NAME(x) __attribute__((export_name(x)))
+  #define EXPORT_NAME(x) extern "C" __attribute__((export_name(x)))
+  extern "C" void __wasm_call_ctors();
+  extern "C" void __wasm_call_dtors();
+  void _prevent_llvm_wasm_ctor_dtor_injections() { __wasm_call_ctors(); __wasm_call_dtors(); }
 #else
   #include <libcxx-dynamic.hpp>
   __attribute__((weak)) extern "C" void __wasm_call_ctors() {}
+  __attribute__((weak)) extern "C" void __wasm_call_dtors() {}
   #define EXPORT_NAME(x) /* x */
 #endif
