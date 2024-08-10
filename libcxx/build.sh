@@ -20,13 +20,39 @@ C_LIBS=( "c" "clang_rt.builtins-wasm32" )
 CXX_LIBS=( "c++" "c++abi" "${C_LIBS[@]}")
 
 CXX_HEADERS=(
-  array atomic bitset cassert chrono cerrno cstdio complex deque
-  exception functional limits locale map memory stack string system_error
-  type_traits vector
+    algorithm
+    array
+    atomic
+    bitset
+    cassert
+    cerrno
+    chrono
+    complex
+    cstdio
+    deque
+    exception
+    functional
+    iostream
+    limits
+    locale
+    map
+    memory
+    stack
+    string
+    system_error
+    type_traits
+    vector
 )
+
 C_HEADERS=(
-  string.h stdio.h stdint.h stdbool.h assert.h 
-  limits.h locale.h errno.h 
+    assert.h
+    errno.h
+    limits.h
+    locale.h
+    stdbool.h
+    stdint.h
+    stdio.h
+    string.h
 )
 
 C_RESOLVED_HEADERS=()
@@ -188,14 +214,21 @@ generate_protobins() {
 
     cat <<EOT > staging/bin/w32c++-$V && chmod a+x staging/bin/w32c++-$V
 #!/bin/bash
+CXX=\${CXX:-\$((which clang++-17 2>/dev/null || which clang++ 2>/dev/null) | head -1)}
+\$CXX --version | grep -E "\\b${V}[.][0-9]+[.][0-9]+\\b" >/dev/null \
+    || { echo "Error: clang++-$V (\$CXX) not found; found \$(\$CXX --version|head -1). Please install (and set CXX= if necessary)." >&2; exit 1; }
 BASE=\$(dirname \$(dirname \$BASH_SOURCE))/libcxx-static
-\${CXX:-clang++} -xc++ ${wasm32_baremetal[@]} -isystem\$BASE -Wl,\$BASE/libcxx.a -Wl,\$BASE/libqwasi.a "\$@"
+set -x # display commands used
+\$CXX -xc++ ${wasm32_baremetal[@]} -isystem\$BASE -Wl,\$BASE/libcxx.a -Wl,-L\$BASE "\$@" -Wl,-lqwasi
 EOT
 
     cat <<EOT > staging/bin/w32cc-$V && chmod a+x staging/bin/w32cc-$V
 #!/bin/bash
+CC=\${CC:-\$((which clang-17 2>/dev/null || which clang 2>/dev/null) | head -1)}
+\$CC --version | grep -E "\\b${V}[.][0-9]+[.][0-9]+\\b" >/dev/null \
+    || { echo "Error: clang-$V (\$CC) not found; found \$(\$CC --version|head -1). Please install (and set CC= if necessary)." >&2; exit 1; }
 BASE=\$(dirname \$(dirname \$BASH_SOURCE))/libc-static
-\${CC:-clang} -xc ${wasm32_baremetal[@]} -isystem\$BASE -Wl,\$BASE/libc.a -Wl,\$BASE/libqwasi.a "\$@"
+\${CC:-clang} -xc ${wasm32_baremetal[@]} -isystem\$BASE -Wl,\$BASE/libc.a -Wl,-L\$BASE "\$@" -Wl,-lqwasi 
 EOT
 
     cat <<EOT > staging/bin/w32info && chmod a+x staging/bin/w32info
@@ -267,11 +300,21 @@ test -f scratch/unpacked.txt || (
     touch scratch/unpacked.txt
 )
 
+compile_qwasi() {
+    mkdir -p scratch/qwasi
+    for x in ../explorations/qwasi/{noops.*.c,capture_fd_writes.c} ; do
+	$CXX ${wasm32_baremetal[@]} -Wno-unused-command-line-argument -c -xc++ $x -o scratch/qwasi/$(basename $x).o
+    done
+    repack_library scratch/qwasi/libqwasi.a scratch/qwasi/noops.*.o
+    repack_library scratch/qwasi/libqwasi-capture.a scratch/qwasi/capture_fd_writes.c.o
+    for x in staging/libcxx-static staging/libc-static ; do
+	test ! -f $x/libqwasi.a || cp -av scratch/qwasi/libqwasi.a $x/
+	test ! -f $x/libqwasi-capture.a || cp -av scratch/qwasi/libqwasi-capture.a $x/
+    done
+}
 
-mkdir -p scratch/qwasi
-for x in ../explorations/qwasi/noops.*.c ; do
-    $CXX ${wasm32_baremetal[@]} -Wno-unused-command-line-argument -c -xc++ $x -o scratch/qwasi/$(basename $x).o
-done
+compile_qwasi
+[[ "$1" == "qwasi" ]] && { ls -l scratch/qwasi ; exit 0 ; }
 
 # false && for x in cxa.host ; do
 #     echo "polyfilling $x..."
@@ -286,12 +329,14 @@ mkdir -p staging/libcxx-static staging/libc-static
 # libcxx
 repack_library staging/libcxx-static/libcxx.a scratch/objects/*
 test ! -d scratch/wasilibc_objects || repack_library staging/libcxx-static/libwasi.a scratch/wasilibc_objects/*
-test ! -d scratch/qwasi || repack_library staging/libcxx-static/libqwasi.a scratch/qwasi/*
+test ! -f scratch/qwasi/libqwasi.a || cp -av scratch/qwasi/libqwasi.a staging/libcxx-static/
+test ! -f scratch/qwasi/libqwasi-capture.a || cp -av scratch/qwasi/libqwasi-capture.a staging/libcxx-static/
 
 # libc
 repack_library staging/libc-static/libc.a scratch/libc-objects/*
-test -d scratch/libc-wasilibc_objects && repack_library staging/libc-static/libwasi.a scratch/libc-wasilibc_objects/*
-test ! -d scratch/qwasi || repack_library staging/libc-static/libqwasi.a scratch/qwasi/*
+test ! -d scratch/libc-wasilibc_objects || repack_library staging/libc-static/libwasi.a scratch/libc-wasilibc_objects/*
+test ! -f scratch/qwasi/libqwasi.a || cp -av scratch/qwasi/libqwasi.a staging/libc-static/
+test ! -f scratch/qwasi/libqwasi-capture.a || cp -av scratch/qwasi/libqwasi-capture.a staging/libc-static/
 
 function make_header() {(set -Euo pipefail ;
     local mode=$1
@@ -329,6 +374,7 @@ make_header c++ "${CXX_RESOLVED_HEADERS[@]}" "${C_RESOLVED_HEADERS[@]}" > stagin
 generate_system_congruent "${CXX_RESOLVED_HEADERS[@]}"  > staging/libcxx-static/libcxx-dynamic.hpp
 cp -av src/libcxx.hpp staging/libcxx-static/
 cp -av test/main.cpp staging/libcxx-static/example.cpp
+cp -av test/stdio.cpp staging/libc-static/qwasi_stdio_test.cpp
 
 generate_defines c "${C_HEADERS[@]}" > scratch/libc.defines
 make_header c "${C_RESOLVED_HEADERS[@]}" > staging/libc-static/libc-wasm32.h
@@ -374,6 +420,7 @@ $(yaml_list "    " "${C_HEADERS[@]}")
 cxxflags:
   wasm32: [ $(IFS=" "; echo "${wasm32_baremetal[*]}") ]
   link: -lcxx-static -lqwasi
+  link_capture: -lcxx-static -lquasi-capture -lqwasi
 misc:
   cxxpp_flags: [ $(IFS=" "; echo "${cxxpp_flags[@]}") ]
   debs:
