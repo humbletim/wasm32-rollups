@@ -307,14 +307,18 @@ compile_qwasi() {
     done
     repack_library scratch/qwasi/libqwasi.a scratch/qwasi/noops.*.o
     repack_library scratch/qwasi/libqwasi-capture.a scratch/qwasi/capture_fd_writes.c.o
+}
+
+compile_qwasi
+[[ "$1" == "qwasi" ]] && {
+    # if devtree tinkering then this updates extant staging/ outputs
+    ls -l scratch/qwasi
     for x in staging/libcxx-static staging/libc-static ; do
 	test ! -f $x/libqwasi.a || cp -av scratch/qwasi/libqwasi.a $x/
 	test ! -f $x/libqwasi-capture.a || cp -av scratch/qwasi/libqwasi-capture.a $x/
     done
+    exit 0
 }
-
-compile_qwasi
-[[ "$1" == "qwasi" ]] && { ls -l scratch/qwasi ; exit 0 ; }
 
 # false && for x in cxa.host ; do
 #     echo "polyfilling $x..."
