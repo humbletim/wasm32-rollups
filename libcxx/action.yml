@@ -34,19 +34,7 @@ runs:
       run: |
         ls -l staging/ *.tar.gz
         echo artifact_name=$(date "+%Y%m%d").rollups.libcxx-wasm32 | tee -a $GITHUB_ENV | tee -a $GITHUB_STEP_SUMMARY
-        export CC=clang-17 CXX=clang++-17
-        ./staging/bin/w32cc-17 test/main.c -o main.c.baremetal.wasm -Oz -s
-        ./staging/bin/w32c++-17 test/main.cpp -o main.cxx.baremetal.wasm -Oz -s
-        ./staging/bin/w32c++-17 test/main.cpp -o main.cxx.wasm
-        ./staging/bin/w32c++-17 test/stdio.cpp -o stdio.cxx.wasm
-        ./staging/bin/w32cc-17 test/stdio.c -o stdio.c.wasm
-        ./staging/bin/w32c++-17 test/stdio.cpp -o stdio.cxx.capture.wasm -lqwasi-capture
-        ./staging/bin/w32cc-17 test/stdio.c -o stdio.c.capture.wasm -lqwasi-capture
-        ./staging/bin/w32c++-17 test/stdio.cpp -o stdio.cxx.baremetal.capture.wasm -lqwasi-capture -Oz -Wl,--strip-debug
-        for x in *.wasm ; do
-          echo "### $x" ; echo '```' ; ./staging/bin/w32info $x ; echo '```' ;
-        done | tee -a $GITHUB_STEP_SUMMARY
-
+        ./build.test.sh | tee -a $GITHUB_STEP_SUMMARY
 
     - name: Upload Release Artifact
       uses: actions/upload-artifact@v4

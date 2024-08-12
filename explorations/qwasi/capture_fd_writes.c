@@ -60,7 +60,31 @@ POLYFILL int __wasi_fd_write(int fd, iovec_t* iovs, int iov_count, unsigned long
   return iov_count;
 }
 
+struct _IO_FILE;
+extern struct _IO_FILE const* stderr;
+extern struct _IO_FILE const* stdout;
+
+POLYFILL unsigned long __fwritex(const unsigned char * ptr, unsigned long size, struct _IO_FILE *stream) {
+  //if (!(stream == stdout || stream == stderr)) return -1;
+  iovec_t tmp;
+  tmp.buf = (unsigned char*)ptr;
+  tmp.buf_len = size;
+  unsigned long nwritten = 0;
+  int r = __wasi_fd_write(stream == stdout ? 1 : stream == stderr ? 2 : 2, &tmp, 1, &nwritten);
+  return nwritten;
+}
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wbuiltin-requires-header"
+POLYFILL unsigned long fwrite(const void* ptr, unsigned long size, unsigned long nmemb, struct _IO_FILE *stream) {
+  unsigned long nwritten = 0;
+  for (int i=0; i < nmemb; i++) {
+    nwritten += __fwritex((unsigned char*)ptr + (size * i), size, stream);
+  }
+  return nwritten;
+}
+#pragma clang diagnostic pop
+
 #ifdef __cplusplus
 } // extern "C"
 #endif
-

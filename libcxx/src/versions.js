@@ -30,6 +30,9 @@ function maybe_dump_captured_fd_writes(exports) {
 (async () => {
     var exports = (await WebAssembly.instantiate(require('fs').readFileSync(process.argv[2]))).instance.exports;
     console.table(module_detect_versions(exports));
-    if (exports.xmain) exports.xmain();
-    maybe_dump_captured_fd_writes(exports);
+    try {
+	if (exports.xmain) exports.xmain();
+    } finally {
+	maybe_dump_captured_fd_writes(exports);
+    }
 })()

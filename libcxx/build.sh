@@ -21,26 +21,50 @@ CXX_LIBS=( "c++" "c++abi" "${C_LIBS[@]}")
 
 CXX_HEADERS=(
     algorithm
+    any
     array
     atomic
     bitset
     cassert
+    cctype
     cerrno
     chrono
+    clocale
+    cmath
     complex
+    cstddef
     cstdio
+    cstdint
+    cstdlib
+    cstring
     deque
     exception
+    filesystem
+    forward_list
     functional
+    initializer_list
+    iomanip
+    ios
+    iosfwd
     iostream
+    istream
+    iterator
     limits
     locale
     map
     memory
+    numeric
+    ostream
     stack
+    stdexcept
     string
+    string_view
     system_error
+    tuple
     type_traits
+    unordered_map
+    utility
+    valarray
     vector
 )
 
@@ -133,14 +157,26 @@ function preprocess() {
     $pp "$@"
 }
 
-generate_defines() {
+diff_defines() {
     local mode=$1
-    shift
-    echo "generate_defines $mode " >&2 
-    preprocess $mode -dM /dev/null > scratch/defines_none.h
+    local left=$2
+    shift 2
+    echo "diff_defines $mode (left=$left) " >&2
+    preprocess $mode -dM $left > scratch/defines_none.h
     preprocess $mode -dM <( amalgamate_includes "$@") > scratch/defines_all.h
     diff scratch/defines_none.h scratch/defines_all.h | grep -E '^>' | sed -e 's@^> @@g' \
 	| ( grep -v '#define __NEED_' || true )
+}
+
+generate_defines() {
+    local mode=$1
+    shift
+    echo "generate_defines $mode " >&2
+    diff_defines "$mode" /dev/null "$@"
+    # preprocess $mode -dM /dev/null > scratch/defines_none.h
+    # preprocess $mode -dM <( amalgamate_includes "$@") > scratch/defines_all.h
+    # diff scratch/defines_none.h scratch/defines_all.h | grep -E '^>' | sed -e 's@^> @@g' \
+    # 	| ( grep -v '#define __NEED_' || true )
 }
 
 unpack_library() {( set -Euo pipefail ;
@@ -320,6 +356,13 @@ compile_qwasi
     exit 0
 }
 
+[[ "$1" == "xincludes" ]] && {
+    for x in "${CXX_HEADERS[@]}" "${C_HEADERS[@]}" ; do
+	test -d staging/libcxx-static/xinclude/$(dirname $x) || mkdir -pv staging/libcxx-static/xinclude/$(dirname $x) ;
+	echo '#include <../libcxx.hpp>' > staging/libcxx-static/xinclude/$x ;
+    done
+    exit 0
+}
 # false && for x in cxa.host ; do
 #     echo "polyfilling $x..."
 #     $CXX  ${wasm32_baremetal[@]} -Wno-unused-command-line-argument -c -xc++ src/$x.c -o scratch/objects/$x.o
@@ -344,22 +387,24 @@ test ! -f scratch/qwasi/libqwasi-capture.a || cp -av scratch/qwasi/libqwasi-capt
 
 function make_header() {(set -Euo pipefail ;
     local mode=$1
-    shift
+    local ID=$2
+    shift 2
     # Gather headers into a fully-preprocesed, monolithic base variation
-    echo "scratch/lib$mode._H" >&2
+    echo "scratch/$ID._H" >&2
     (
 	echo '/* Combined headers */'
 	preprocess $mode <( amalgamate_sources "$@" ) 
-    ) > scratch/lib$mode._H
+    ) > scratch/$ID._H
     
     # Construct final header file with ifguards, defines and monolithic base
     # as well as preprocessor #line entries into brief variations
     (
-	echo -e '#ifndef _LIBCXX_H\n#define _LIBCXX_H'
-	echo "__attribute__((export_name(\".rollups.lib${mode//+/x}.version\"))) unsigned long long rollups_lib${mode//+/x}_version() { return 0x00$(date "+%Y%m%d"); }"
-	cat scratch/lib$mode.defines
-	cat scratch/lib$mode._H 
-	echo -e '#endif //_LIBCXX_H'
+	echo -e "// generated"
+	echo -e "#ifndef _${ID}_H\n#define _${ID}_H"
+	echo "__attribute__((export_name(\".rollups.${ID}.version\"))) unsigned long long rollups_${ID}_version() { return 0x00$(date "+%Y%m%d"); }"
+	cat scratch/$ID.defines
+	cat scratch/$ID._H
+	echo -e "#endif //_${ID}_H"
     ) \
 	| perl -pe 's@^(#[^"]+")[^ ]+wasm32-wasi/c[+][+]/v1/@$1\{libc++}/@g' \
 	| perl -pe 's@^(#[^"]+")[^ ]+wasm32-wasi/@$1\{libc}/@g' \
@@ -373,15 +418,22 @@ generate_system_congruent() {
     done
 }
 
-generate_defines c++ "${CXX_HEADERS[@]}" "${C_HEADERS[@]}" > scratch/libc++.defines
-make_header c++ "${CXX_RESOLVED_HEADERS[@]}" "${C_RESOLVED_HEADERS[@]}" > staging/libcxx-static/libcxx-wasm32.hpp
+generate_defines c++ "${CXX_HEADERS[@]}" "${C_HEADERS[@]}" > scratch/LIBCXX.defines
+make_header c++ LIBCXX "${CXX_RESOLVED_HEADERS[@]}" "${C_RESOLVED_HEADERS[@]}" > staging/libcxx-static/libcxx-wasm32.hpp
 generate_system_congruent "${CXX_RESOLVED_HEADERS[@]}"  > staging/libcxx-static/libcxx-dynamic.hpp
 cp -av src/libcxx.hpp staging/libcxx-static/
 cp -av test/main.cpp staging/libcxx-static/example.cpp
 cp -av test/stdio.cpp staging/libcxx-static/qwasi_stdio_test.cpp
 
-generate_defines c "${C_HEADERS[@]}" > scratch/libc.defines
-make_header c "${C_RESOLVED_HEADERS[@]}" > staging/libc-static/libc-wasm32.h
+source ../nlohmann-json/_build.sh || { echo "error processing json $?" >&2 ; exit 82 ; }
+#source ../fmt/_build.sh
+
+cp -av src/libcxx.hpp staging/libcxx-static/
+cp -av test/main.cpp staging/libcxx-static/example.cpp
+cp -av test/stdio.cpp staging/libcxx-static/qwasi_stdio_test.cpp
+
+generate_defines c "${C_HEADERS[@]}" > scratch/LIBC.defines
+make_header c LIBC "${C_RESOLVED_HEADERS[@]}" > staging/libc-static/libc-wasm32.h
 cp -av src/libc.h staging/libc-static/
 generate_system_congruent "${C_RESOLVED_HEADERS[@]}" > staging/libc-static/libc-dynamic.h
 cp -av test/main.c staging/libc-static/example.c

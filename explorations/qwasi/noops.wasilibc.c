@@ -16,9 +16,17 @@ POLYFILL int fclose(int a) { return EBADF; }
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wbuiltin-requires-header"
 POLYFILL struct _IO_FILE* fopen(const char* path, const char* mode) { return 0; }
+POLYFILL unsigned long fwrite(const void* ptr, unsigned long size, unsigned long nmemb, struct _IO_FILE *stream) { return nmemb; }
+
 #pragma clang diagnostic pop
 
+POLYFILL unsigned long __fwritex(const unsigned char * s, unsigned long l, struct _IO_FILE *f) { return l; }
+
 POLYFILL char* getenv(const char*) { return 0; }
+
+POLYFILL unsigned int __stack_chk_guard;
+POLYFILL void __stack_chk_fail(void) {}
+
 POLYFILL void __wasilibc_initialize_environ(void) {}
 POLYFILL void __wasilibc_ensure_environ(void) {}
 POLYFILL void __wasilibc_deinitialize_environ(void) {}
