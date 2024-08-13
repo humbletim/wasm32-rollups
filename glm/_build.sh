@@ -19,23 +19,23 @@ build_glm() {
     CXX="$CXX -I$glm/glm -isystem$glm ${glm_defines[@]}" diff_defines c++ staging/libcxx-static/libcxx-wasm32.hpp "${glm_headers[@]}" \
        > scratch/GLM.defines || die 234
     echo "====================================== build_glm -- make_header..." >&2
+    local -a resolved_glm_headers
+    for x in ${glm_headers[@]}; do resolved_glm_headers+=($glm/$x) ; done
+    # FIXME: libcxx.hpp assumed; this turns corresponding system headers into no-ops
+    local yinclude=scratch/yinclude
+    for x in "${CXX_HEADERS[@]}" "${C_HEADERS[@]}" ; do
+	test -d $yinclude/$(dirname $x) || mkdir -pv $yinclude/$(dirname $x) ;
+	echo "/* $x */" > $yinclude/$x ;
+    done >&2
     {
 	echo "// SOURCE: https://github.com/g-truc/glm @ ${version}"
-	local -a resolved_glm_headers
-	for x in ${glm_headers[@]}; do resolved_glm_headers+=($glm/$x) ; done
-	# FIXME: libcxx.hpp assumed; this turns corresponding system headers into no-ops
-	local yinclude=scratch/yinclude
-	for x in "${CXX_HEADERS[@]}" "${C_HEADERS[@]}" ; do
-	    test -d $yinclude/$(dirname $x) || mkdir -pv $yinclude/$(dirname $x) ;
-	    echo "/* $x */" > $yinclude/$x ;
-	done
 	cxxpp_flags="" 	CXX="$CXX -P -Wno-pragma-once-outside-header ${glm_defines[@]} -isystemscratch/yinclude -I$glm/glm -I$glm/glm/gtc -I$glm/glm/gtx -isystem$glm" \
 	   make_header c++ GLM "${resolved_glm_headers[@]}" || die 5
     } > staging/libcxx-static/glm.cxx
     echo "====================================== build_glm -- finalize..." >&2
     amalgamate_includes "${glm_headers[@]}" > staging/libcxx-static/glm-dynamic.hpp
-    cp -av $glm/glm/copying.txt staging/libcxx-static/glm.license.txt
-    cp -av $glm/test-glm.cpp staging/libcxx-static/glm.test.cpp
+    cp -av $glm/glm/copying.txt staging/libcxx-static/glm.license.txt >&2
+    cp -av $glm/test-glm.cpp staging/libcxx-static/glm.test.cpp >&2
 }
 
 build_glm || return 5
