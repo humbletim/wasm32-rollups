@@ -3,7 +3,7 @@ build_glm() {
     echo "====================================== build_glm..." >&2
     local glm=$(dirname $BASH_SOURCE)
     local version=1.0.1
-    local downoad=https://github.com/g-truc/glm/releases/download/${version}/glm-${version}-light.zip
+    local download=https://github.com/g-truc/glm/releases/download/${version}/glm-${version}-light.zip
     local archive=glm-${version}-light.zip
     local -a glm_headers=(
 	glm/glm.hpp
