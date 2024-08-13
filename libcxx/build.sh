@@ -4,7 +4,12 @@
 # libc++.a and related .deb's from upstream ubuntu repos and amalgamates
 # everything together into a singular static libcxx.a + libcxx.hpp
 
-set -e  # Exit on error
+set -Euo pipefail  # Exit on error
+
+function die() {
+    echo "die: $@" >&2
+    exit 1
+}
 
 # === Configuration ===
 V=17  # LLVM version 
@@ -28,10 +33,13 @@ CXX_HEADERS=(
     cassert
     cctype
     cerrno
+    cfloat
     chrono
+    climits
     clocale
     cmath
     complex
+    cstdarg
     cstddef
     cstdio
     cstdint
@@ -132,22 +140,22 @@ declare -A quieters=(
 '
 )
 
-amalgamate_sources() {( set -Euo pipefail ;
+amalgamate_sources() {
   local file
   for file in "$@"; do
     test ! -v quieters["$(basename $file).before"] || echo "${quieters[$(basename $file).before]}"
     echo "#line 0 \"$file\""
-    cat "$file"
+    cat "$file" || die "error processing $file"
     test ! -v quieters["$(basename $file).after"] || echo "${quieters[$(basename $file).after]}"
   done
-)}
+}
 
-amalgamate_includes() {( set -Euo pipefail ;
+amalgamate_includes() {
   local file
   for file in "$@"; do
     echo "#include <$file>"
   done
-)}
+}
 
 function preprocess() {
     local mode=$1
@@ -162,10 +170,10 @@ diff_defines() {
     local left=$2
     shift 2
     echo "diff_defines $mode (left=$left) " >&2
-    preprocess $mode -dM $left > scratch/defines_none.h
-    preprocess $mode -dM <( amalgamate_includes "$@") > scratch/defines_all.h
+    preprocess $mode -dM $left > scratch/defines_none.h || exit 1
+    preprocess $mode -dM <( amalgamate_includes "$@") > scratch/defines_all.h || exit 2
     diff scratch/defines_none.h scratch/defines_all.h | grep -E '^>' | sed -e 's@^> @@g' \
-	| ( grep -v '#define __NEED_' || true )
+	| ( grep -v '#define __NEED_' || true ) || true
 }
 
 generate_defines() {
@@ -179,7 +187,7 @@ generate_defines() {
     # 	| ( grep -v '#define __NEED_' || true )
 }
 
-unpack_library() {( set -Euo pipefail ;
+unpack_library() {
     local lib=$1
     alib="$(find scratch/ -type f -name "lib${lib}.a")"
     echo "recursively unarchiving ... ${alib}" >&2
@@ -206,7 +214,7 @@ unpack_library() {( set -Euo pipefail ;
 	    cp -a $verbose $x/$y scratch/$lib.objects/$y$uniq
 	done
     done
-)}
+}
 
 # consolidate levels into common folder (ensuring distinct object filenames)
 merge_objects_fromlib_tofolder() {
@@ -346,7 +354,7 @@ compile_qwasi() {
 }
 
 compile_qwasi
-[[ "$1" == "qwasi" ]] && {
+[[ "${1:-}" == "qwasi" ]] && {
     # if devtree tinkering then this updates extant staging/ outputs
     ls -l scratch/qwasi
     for x in staging/libcxx-static staging/libc-static ; do
@@ -356,10 +364,11 @@ compile_qwasi
     exit 0
 }
 
-[[ "$1" == "xincludes" ]] && {
+[[ "${1:-}" == "xincludes" ]] && {
+    xinclude=staging/libcxx-static/xinclude
     for x in "${CXX_HEADERS[@]}" "${C_HEADERS[@]}" ; do
-	test -d staging/libcxx-static/xinclude/$(dirname $x) || mkdir -pv staging/libcxx-static/xinclude/$(dirname $x) ;
-	echo '#include <../libcxx.hpp>' > staging/libcxx-static/xinclude/$x ;
+	test -d $xinclude/$(dirname $x) || mkdir -pv $xinclude/$(dirname $x) ;
+	echo '#include <../libcxx.hpp>' > $xinclude/$x ;
     done
     exit 0
 }
@@ -385,16 +394,16 @@ test ! -d scratch/libc-wasilibc_objects || repack_library staging/libc-static/li
 test ! -f scratch/qwasi/libqwasi.a || cp -av scratch/qwasi/libqwasi.a staging/libc-static/
 test ! -f scratch/qwasi/libqwasi-capture.a || cp -av scratch/qwasi/libqwasi-capture.a staging/libc-static/
 
-function make_header() {(set -Euo pipefail ;
+function make_header() {
     local mode=$1
     local ID=$2
     shift 2
     # Gather headers into a fully-preprocesed, monolithic base variation
     echo "scratch/$ID._H" >&2
     (
-	echo '/* Combined headers */'
+	echo "/* Combined headers ${#@} */"
 	preprocess $mode <( amalgamate_sources "$@" ) 
-    ) > scratch/$ID._H
+    ) > scratch/$ID._H || exit 2
     
     # Construct final header file with ifguards, defines and monolithic base
     # as well as preprocessor #line entries into brief variations
@@ -402,14 +411,14 @@ function make_header() {(set -Euo pipefail ;
 	echo -e "// generated"
 	echo -e "#ifndef _${ID}_H\n#define _${ID}_H"
 	echo "__attribute__((export_name(\".rollups.${ID}.version\"))) unsigned long long rollups_${ID}_version() { return 0x00$(date "+%Y%m%d"); }"
-	cat scratch/$ID.defines
-	cat scratch/$ID._H
+	cat scratch/$ID.defines || exit 40
+	cat scratch/$ID._H || exit 41
 	echo -e "#endif //_${ID}_H"
-    ) \
+    )\
 	| perl -pe 's@^(#[^"]+")[^ ]+wasm32-wasi/c[+][+]/v1/@$1\{libc++}/@g' \
 	| perl -pe 's@^(#[^"]+")[^ ]+wasm32-wasi/@$1\{libc}/@g' \
-	| perl -pe 's@^(#[^"]+")/usr/lib/[^ ]+/include/@$1\{llvm}/@g'	       
-)}
+	| perl -pe 's@^(#[^"]+")/usr/lib/[^ ]+/include/@$1\{llvm}/@g' || exit 56
+}
 
 generate_system_congruent() {
     echo "// generated"
@@ -425,8 +434,9 @@ cp -av src/libcxx.hpp staging/libcxx-static/
 cp -av test/main.cpp staging/libcxx-static/example.cpp
 cp -av test/stdio.cpp staging/libcxx-static/qwasi_stdio_test.cpp
 
-source ../nlohmann-json/_build.sh || { echo "error processing json $?" >&2 ; exit 82 ; }
-#source ../fmt/_build.sh
+for x in nlohmann-json glm ; do
+    source ../$x/_build.sh || die "error processing $x rc=$?"
+done
 
 cp -av src/libcxx.hpp staging/libcxx-static/
 cp -av test/main.cpp staging/libcxx-static/example.cpp

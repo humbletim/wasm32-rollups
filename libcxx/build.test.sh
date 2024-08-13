@@ -10,6 +10,7 @@ export CC=clang-17 CXX=clang++-17
 ./staging/bin/w32cc-17  -lqwasi-capture test/stdio.c -o stdio.c.capture.wasm
 ./staging/bin/w32c++-17 -lqwasi-capture test/stdio.cpp -o stdio.cxx.baremetal.capture.wasm -Oz -Wl,--strip-debug
 ./staging/bin/w32c++-17 -lqwasi-capture staging/libcxx-static/nlohmann-json.test.cpp -o test-json.capture.wasm -Oz -Wl,--strip-debug
+./staging/bin/w32c++-17 -lqwasi-capture staging/libcxx-static/glm.test.cpp -o test-glm.capture.wasm -Oz -Wl,--strip-debug
 
 for x in *.wasm ; do
     echo "### $x" ; echo '```' ; ./staging/bin/w32info $x ; echo '```' ;
