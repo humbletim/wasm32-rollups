@@ -302,8 +302,8 @@ mkdir -p downloads
 test -f downloads/debs.txt || (
     set -Euo pipefail
     cd downloads
-    curl -s http://archive.ubuntu.com/ubuntu/dists/mantic/universe/binary-amd64/Packages.xz | xzcat \
-	| grep -Eo "pool/.*(${V}-dev-wasm32|wasi-libc).*[.]deb" | sed 's@^@http://archive.ubuntu.com/ubuntu/@' \
+    curl -s https://old-releases.ubuntu.com/ubuntu/dists/mantic/universe/binary-amd64/Packages.xz | xzcat \
+	| grep -Eo "pool/.*(${V}-dev-wasm32|wasi-libc).*[.]deb" | sed 's@^@http://old-releases.ubuntu.com/ubuntu/@' \
 	| tee debs.txt | xargs wget -c -nv
     [ $(cat debs.txt | wc -l) -eq 4 ] \
 	|| { echo "expected 4 found packages... but got $(wc -l debs.txt);" ; cat debs.txt ; rm debs.txt ; exit 4 ; }
